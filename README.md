@@ -109,13 +109,6 @@ cd frontend
 npm run dev
 ```
 
-**方式二：同时启动（推荐）**
-
-```bash
-# macOS/Linux
-cd backend && npm run dev &
-cd frontend && npm run dev
-```
 
 ### 5. 访问应用
 
