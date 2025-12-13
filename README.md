@@ -41,10 +41,17 @@ predict-fun-trading/
 ### 前置要求
 
 - Node.js >= 18.0.0
+  
 - npm 或 yarn
 - MetaMask 钱包
 - Predict.fun API Key
+# 安装 Node.js 20.x（LTS 版本）
+curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+sudo apt install -y nodejs
 
+# 验证安装
+node -v
+npm -v
 ### 1. 获取 API Key
 
 1. 访问 [Predict.fun](https://predict.fun)
@@ -137,109 +144,17 @@ cd frontend && npm run dev
 ## 🔧 功能说明
 
 ### ✅ 已实现功能
-
-- ✅ 连接 MetaMask 钱包（自动切换 BSC 主网）
 - ✅ 查看预测市场列表
 - ✅ 市场分类和状态显示
 - ✅ JWT 认证流程
 - ✅ 订单簿实时显示
 - ✅ 限价单创建与提交
 - ✅ 市价单创建与提交
-- ✅ 使用 @predictdotfun/sdk 构建和签名订单
-- ✅ ERC-20 (USDT) 代币授权
 - ✅ 订单列表查看
 - ✅ 订单取消功能
 - ✅ 持仓查看
 - ✅ 盈亏计算
-- ✅ 自动绑定邀请码
-- ✅ 暗色主题 UI
-- ✅ 响应式设计
 
-### 📋 交易流程
-
-1. **连接钱包** - 点击连接按钮，MetaMask 自动切换到 BSC 主网
-2. **签名认证** - 签署认证消息获取 JWT Token
-3. **选择市场** - 从市场列表选择要交易的市场
-4. **下单交易** - 选择买入/卖出，设置价格和数量
-5. **确认签名** - 使用 EIP-712 签名订单
-6. **订单提交** - 订单提交到 Predict.fun
-
-## 🔐 安全注意事项
-
-1. **API Key 安全** - API Key 只在后端使用，不暴露给前端
-2. **JWT Token** - 存储在浏览器内存中，不会上传服务器
-3. **环境变量** - 使用 `.env` 文件存储敏感配置
-4. **Git 忽略** - 确保 `.env` 文件已添加到 `.gitignore`
-
-## 🌐 生产部署
-
-### Nginx 配置示例
-
-```nginx
-server {
-    listen 80;
-    server_name your-domain.com;
-
-    # 前端
-    location / {
-        proxy_pass http://127.0.0.1:5173;
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection 'upgrade';
-        proxy_set_header Host $host;
-        proxy_cache_bypass $http_upgrade;
-    }
-
-    # 后端 API
-    location /api/ {
-        proxy_pass http://127.0.0.1:3485/api/;
-        proxy_http_version 1.1;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-    }
-}
-```
-
-### SSL 证书
-
-```bash
-# 安装 Certbot
-sudo apt install certbot python3-certbot-nginx
-
-# 获取 SSL 证书
-sudo certbot --nginx -d your-domain.com
-```
-
-## 🐛 常见问题
-
-### Q: 获取市场数据失败？
-
-1. 检查 API Key 是否正确配置
-2. 访问 `http://localhost:3485/api/health` 确认后端状态
-3. 确认网络环境可以访问 `api.predict.fun`
-
-### Q: 钱包连接失败？
-
-1. 确保已安装 MetaMask
-2. 确保 MetaMask 已解锁
-3. 确认网络已切换到 BSC 主网（Chain ID: 56）
-
-### Q: 订单提交失败？
-
-1. 检查 USDT 余额是否充足
-2. 确认已授权足够的 USDT 额度
-3. 价格精度最多 2 位小数
-4. 订单最小价值 0.9 USD
-
-### Q: 市价单报错？
-
-1. 确保订单簿有足够流动性
-2. 如订单簿为空，请使用限价单
-
-### Q: InvalidSignature 错误？
-
-1. 确保钱包在 BSC 主网
-2. 重新连接钱包后再试
 
 ## 📦 依赖说明
 
@@ -260,11 +175,6 @@ sudo certbot --nginx -d your-domain.com
 ## 📚 参考文档
 
 - [Predict.fun API 文档](https://dev.predict.fun)
-- [Predict.fun SDK](https://www.npmjs.com/package/@predictdotfun/sdk)
-- [ethers.js v6 文档](https://docs.ethers.org/v6/)
-- [BSC 文档](https://docs.bnbchain.org/)
-- [Vite 文档](https://vitejs.dev/)
-- [React 文档](https://react.dev/)
 
 ## 📄 许可证
 
