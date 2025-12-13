@@ -684,14 +684,26 @@ const TradeModal = ({ market, isOpen, onClose, signer, jwtToken, onTradeSuccess 
                 onTradeSuccess && onTradeSuccess(response.data);
                 onClose();
             } else {
-                setError(response.data.error || response.data.message || '订单提交失败');
+                // 优先显示详细错误描述
+                const errorDesc = response.data.error?.description || 
+                                  response.data.error || 
+                                  response.data.message || 
+                                  '订单提交失败';
+                setError(errorDesc);
             }
         } catch (err) {
             console.error('Trade failed:', err);
             if (err.code === 'ACTION_REJECTED') {
                 setError('用户拒绝签名');
             } else {
-                setError(err.response?.data?.message || err.message || '订单提交失败');
+                // 优先显示详细错误描述
+                const errorData = err.response?.data;
+                const errorDesc = errorData?.error?.description || 
+                                  errorData?.error || 
+                                  errorData?.message || 
+                                  err.message || 
+                                  '订单提交失败';
+                setError(errorDesc);
             }
         } finally {
             setIsSubmitting(false);
