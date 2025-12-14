@@ -7,6 +7,7 @@ import OrderBook from './components/OrderBook';
 import Positions from './components/Positions';
 import Orders from './components/Orders';
 import ApprovalManager from './components/ApprovalManager';
+import { ToastProvider } from './components/Toast';
 import './App.css';
 
 // 使用相对路径，通过 Vite 代理转发到后端（隐藏后端 IP）
@@ -181,6 +182,7 @@ function App() {
   };
 
   return (
+    <ToastProvider>
     <div className="App" style={styles.app}>
       {/* Header */}
       <header style={styles.header}>
@@ -316,6 +318,7 @@ function App() {
         onTradeSuccess={handleTradeSuccess}
       />
     </div>
+    </ToastProvider>
   );
 }
 
