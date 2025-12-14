@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
 import { ethers } from 'ethers';
+import { useToast } from './Toast';
 
 // ============================================
 // 使用 @predictdotfun/sdk 构建订单
@@ -92,6 +93,9 @@ const TradeModal = ({ market, isOpen, onClose, signer, jwtToken, onTradeSuccess 
     const [orderBuilder, setOrderBuilder] = useState(null);
     const [isApproving, setIsApproving] = useState(false);
     const [approvalStatus, setApprovalStatus] = useState(null); // null, 'pending', 'approved', 'error'
+    
+    // Toast 弹窗
+    const { showError, showSuccess } = useToast();
 
     // 加载 SDK
     useEffect(() => {
@@ -680,7 +684,7 @@ const TradeModal = ({ market, isOpen, onClose, signer, jwtToken, onTradeSuccess 
             });
 
             if (response.data.success) {
-                alert(`订单提交成功！\n订单哈希: ${orderHash}`);
+                showSuccess('订单提交成功！');
                 onTradeSuccess && onTradeSuccess(response.data);
                 onClose();
             } else {
@@ -689,12 +693,12 @@ const TradeModal = ({ market, isOpen, onClose, signer, jwtToken, onTradeSuccess 
                                   response.data.error || 
                                   response.data.message || 
                                   '订单提交失败';
-                setError(errorDesc);
+                showError(errorDesc);
             }
         } catch (err) {
             console.error('Trade failed:', err);
             if (err.code === 'ACTION_REJECTED') {
-                setError('用户拒绝签名');
+                showError('用户拒绝签名');
             } else {
                 // 优先显示详细错误描述
                 const errorData = err.response?.data;
@@ -703,7 +707,7 @@ const TradeModal = ({ market, isOpen, onClose, signer, jwtToken, onTradeSuccess 
                                   errorData?.message || 
                                   err.message || 
                                   '订单提交失败';
-                setError(errorDesc);
+                showError(errorDesc);
             }
         } finally {
             setIsSubmitting(false);
