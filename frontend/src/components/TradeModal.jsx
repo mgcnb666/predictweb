@@ -759,38 +759,6 @@ const TradeModal = ({ market, isOpen, onClose, signer, jwtToken, onTradeSuccess 
                     </div>
                 )}
 
-                {/* 授权按钮 */}
-                {signer && sdkLoaded && (
-                    <div style={styles.approvalSection}>
-                        <div style={styles.approvalInfo}>
-                            <span style={styles.approvalLabel}>代币授权:</span>
-                            <span style={{
-                                ...styles.approvalStatusText,
-                                color: approvalStatus === 'approved' ? '#2e7d32' : 
-                                       approvalStatus === 'error' ? '#c62828' : '#666'
-                            }}>
-                                {approvalStatus === 'approved' ? '✓ 已授权' : 
-                                 approvalStatus === 'error' ? '✗ 授权失败' : 
-                                 approvalStatus === 'pending' ? '⏳ 授权中...' : '未授权'}
-                            </span>
-                        </div>
-                        <button
-                            onClick={handleApproval}
-                            disabled={isApproving || approvalStatus === 'approved'}
-                            style={{
-                                ...styles.approvalBtn,
-                                opacity: (isApproving || approvalStatus === 'approved') ? 0.6 : 1,
-                                backgroundColor: approvalStatus === 'approved' ? '#4caf50' : '#ff9800'
-                            }}
-                        >
-                            {isApproving ? '授权中...' : 
-                             approvalStatus === 'approved' ? '已授权 ✓' : '授权 USDT'}
-                        </button>
-                        <div style={styles.approvalHint}>
-                            首次交易前需要授权 USDT
-                        </div>
-                    </div>
-                )}
 
                 {/* 订单类型 */}
                 <div style={styles.formGroup}>
