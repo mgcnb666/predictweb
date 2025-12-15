@@ -284,6 +284,7 @@ function App() {
                 jwtToken={jwtToken}
                 userAddress={userAddress}
                 onSelectMarket={handleMarketSelect}
+                signer={signer}
               />
             </div>
           </div>
