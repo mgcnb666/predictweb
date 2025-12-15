@@ -1,11 +1,163 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
+import { ethers } from 'ethers';
+import { useToast } from './Toast';
 
-const Positions = ({ jwtToken, userAddress, onSelectMarket }) => {
+// 动态导入 SDK
+let OrderBuilder, ChainId;
+const loadSDK = async () => {
+    if (OrderBuilder) return true;
+    try {
+        const sdk = await import('@predictdotfun/sdk');
+        OrderBuilder = sdk.OrderBuilder;
+        ChainId = sdk.ChainId;
+        return true;
+    } catch (err) {
+        console.error('Failed to load SDK:', err);
+        return false;
+    }
+};
+
+const BSC_CHAIN_ID = 56;
+
+const Positions = ({ jwtToken, userAddress, onSelectMarket, signer }) => {
     const [positions, setPositions] = useState([]);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
     const [showAll, setShowAll] = useState(false);
+    const [redeemingId, setRedeemingId] = useState(null);
+    const [sdkLoaded, setSdkLoaded] = useState(false);
+    
+    const { showError, showSuccess } = useToast();
+
+    // 加载 SDK
+    useEffect(() => {
+        loadSDK().then(success => setSdkLoaded(success));
+    }, []);
+
+    // 赎回持仓
+    const handleRedeem = async (position, e) => {
+        e.stopPropagation(); // 阻止触发卡片点击
+        
+        if (!signer) {
+            showError('请先连接钱包');
+            return;
+        }
+
+        const positionId = position.id || position.tokenId;
+        setRedeemingId(positionId);
+
+        try {
+            // 确保 SDK 已加载
+            const sdkSuccess = await loadSDK();
+            if (!sdkSuccess || !OrderBuilder) {
+                showError('SDK 加载失败，请刷新页面重试');
+                setRedeemingId(null);
+                return;
+            }
+
+            // 获取新的 signer
+            const freshProvider = new ethers.BrowserProvider(window.ethereum);
+            const freshSigner = await freshProvider.getSigner();
+
+            console.log('Creating OrderBuilder with ChainId:', BSC_CHAIN_ID);
+            
+            // 创建 OrderBuilder
+            const orderBuilder = await OrderBuilder.make(BSC_CHAIN_ID, freshSigner);
+
+            // 打印完整的 position 数据用于调试
+            console.log('Position data:', JSON.stringify(position, null, 2));
+
+            // 获取赎回参数
+            const conditionId = position.conditionId || 
+                               position.market?.conditionId || 
+                               position.marketDetails?.conditionId;
+            
+            // indexSet: 从 outcome 获取，1 = Yes, 2 = No
+            const indexSet = position.outcome?.indexSet || 
+                            position.indexSet || 
+                            1;
+            
+            // amount: 赎回数量
+            const amount = position.amount || 
+                          position.shares || 
+                          position.balance ||
+                          position.size;
+            
+            const isNegRisk = position.isNegRisk || 
+                             position.market?.isNegRisk || 
+                             position.marketDetails?.negRisk ||
+                             false;
+            
+            const isYieldBearing = position.isYieldBearing !== undefined 
+                ? position.isYieldBearing 
+                : (position.marketDetails?.isYieldBearing !== undefined 
+                    ? position.marketDetails.isYieldBearing 
+                    : true);
+
+            console.log('Redeem params:', {
+                conditionId,
+                indexSet,
+                amount: amount?.toString(),
+                isNegRisk,
+                isYieldBearing
+            });
+
+            if (!conditionId) {
+                showError('无法获取 conditionId，市场数据不完整');
+                setRedeemingId(null);
+                return;
+            }
+
+            if (!amount) {
+                showError('无法获取赎回数量');
+                setRedeemingId(null);
+                return;
+            }
+
+            // 跳过状态检查，直接尝试赎回（让 SDK 返回具体错误）
+            const marketStatus = position.market?.status || position.marketDetails?.status;
+            console.log('Market status:', marketStatus, '(跳过状态检查，直接尝试赎回)');
+
+            const redeemParams = {
+                conditionId,
+                indexSet: Number(indexSet),  // SDK 可能需要数字类型
+                amount: amount.toString(),
+                isNegRisk,
+                isYieldBearing,
+            };
+
+            console.log('Final redeemParams:', redeemParams);
+
+            const result = await orderBuilder.redeemPositions(redeemParams);
+
+            if (result.success) {
+                showSuccess('赎回成功！');
+                // 刷新持仓
+                fetchPositions();
+            } else {
+                showError(`赎回失败: ${result.cause || '未知错误'}`);
+            }
+        } catch (err) {
+            console.error('Redeem failed:', err);
+            if (err.code === 'ACTION_REJECTED') {
+                showError('用户取消了交易');
+            } else if (err.message?.includes('result for condition not received yet')) {
+                // 链上返回的错误：市场尚未结算
+                showError('赎回失败: 市场尚未结算。请等待比赛结束并结果上链后再试。');
+            } else if (err.message?.includes('Cannot convert undefined to a BigInt')) {
+                // SDK 内部错误，通常是因为市场尚未结算
+                const marketStatus = position.market?.status || position.marketDetails?.status || '未知';
+                showError(`赎回失败: 市场尚未结算（状态: ${marketStatus}）。只有已结算的市场才能赎回。`);
+            } else if (err.message?.includes('payout') || err.message?.includes('resolution')) {
+                showError('赎回失败: 市场尚未结算，无法获取结算数据');
+            } else {
+                showError(`赎回失败: ${err.message}`);
+            }
+        } finally {
+            setRedeemingId(null);
+        }
+    };
 
     useEffect(() => {
         if (jwtToken && userAddress) {
@@ -32,34 +184,63 @@ const Positions = ({ jwtToken, userAddress, onSelectMarket }) => {
             if (response.data.success) {
                 const positionsData = response.data.data || [];
                 
-                // 为每个持仓获取当前市场价格
-                const positionsWithPrices = await Promise.all(
+                // 为每个持仓获取当前市场价格和市场状态
+                const positionsWithDetails = await Promise.all(
                     positionsData.map(async (pos) => {
-                        try {
-                            const marketId = pos.marketId || pos.market?.id;
-                            if (marketId) {
+                        let updatedPos = { ...pos };
+                        const marketId = pos.marketId || pos.market?.id;
+                        
+                        if (marketId) {
+                            try {
+                                // 获取市场详情（包含结算状态）
+                                const marketResponse = await axios.get(`/api/markets/${marketId}`);
+                                if (marketResponse.data.success || marketResponse.data.data) {
+                                    const marketData = marketResponse.data.data || marketResponse.data;
+                                    // 判断市场是否已结算
+                                    // 可能的字段: status, resolved, resolutionStatus, closed, finalized
+                                    const isResolved = 
+                                        marketData.status === 'RESOLVED' ||
+                                        marketData.status === 'SETTLED' ||
+                                        marketData.status === 'CLOSED' ||
+                                        marketData.resolved === true ||
+                                        marketData.finalized === true ||
+                                        (marketData.resolutionStatus && marketData.resolutionStatus !== 'PENDING');
+                                    
+                                    updatedPos.marketDetails = marketData;
+                                    updatedPos.isResolved = isResolved;
+                                    updatedPos.conditionId = marketData.conditionId || pos.conditionId;
+                                    updatedPos.isNegRisk = marketData.isNegRisk || marketData.negRisk || false;
+                                    updatedPos.isYieldBearing = marketData.isYieldBearing !== undefined 
+                                        ? marketData.isYieldBearing 
+                                        : true;
+                                }
+                            } catch (err) {
+                                console.log('Could not fetch market details:', marketId);
+                            }
+                            
+                            try {
+                                // 获取订单簿价格
                                 const obResponse = await axios.get(`/api/orderbook/${marketId}`);
                                 if (obResponse.data.success || obResponse.data.bids || obResponse.data.asks) {
                                     const orderBook = obResponse.data.data || obResponse.data;
-                                    // 获取最佳买价作为当前价格（Yes 的价格）
                                     const bestBid = orderBook.bids?.[0]?.[0] || 0;
                                     const bestAsk = orderBook.asks?.[0]?.[0] || 0;
-                                    // 使用中间价或最佳买价
                                     const currentPrice = bestBid > 0 && bestAsk > 0 
                                         ? (bestBid + bestAsk) / 2 
                                         : (bestBid || bestAsk || 0);
                                     
-                                    return { ...pos, fetchedPrice: currentPrice };
+                                    updatedPos.fetchedPrice = currentPrice;
                                 }
+                            } catch (err) {
+                                console.log('Could not fetch orderbook for market:', marketId);
                             }
-                        } catch (err) {
-                            console.log('Could not fetch orderbook for market:', pos.marketId);
                         }
-                        return pos;
+                        
+                        return updatedPos;
                     })
                 );
                 
-                setPositions(positionsWithPrices);
+                setPositions(positionsWithDetails);
             } else {
                 setError(response.data.error || '获取持仓失败');
             }
@@ -173,6 +354,9 @@ const Positions = ({ jwtToken, userAddress, onSelectMarket }) => {
                                 key={position.id || index} 
                                 position={position}
                                 onSelect={onSelectMarket}
+                                onRedeem={handleRedeem}
+                                isRedeeming={redeemingId === (position.id || position.tokenId)}
+                                canRedeem={signer && sdkLoaded}
                             />
                         ))}
                     </div>
@@ -204,7 +388,7 @@ const fromWei = (value) => {
 };
 
 // 单个持仓卡片
-const PositionCard = ({ position, onSelect }) => {
+const PositionCard = ({ position, onSelect, onRedeem, isRedeeming, canRedeem }) => {
     const {
         market,
         outcome,
@@ -218,6 +402,15 @@ const PositionCard = ({ position, onSelect }) => {
         tokenId,
         side
     } = position;
+
+    // 检查市场是否已结算（可赎回）
+    // 优先使用从 API 获取的 isResolved 状态
+    const isResolved = position.isResolved === true ||
+                       market?.status === 'RESOLVED' || 
+                       market?.status === 'SETTLED' ||
+                       market?.resolved === true || 
+                       position.redeemable === true ||
+                       position.marketDetails?.finalized === true;
 
     // 使用 fromWei 转换 Wei 格式的数值
     const displayShares = fromWei(shares || position.amount || 0);
@@ -283,6 +476,20 @@ const PositionCard = ({ position, onSelect }) => {
                     {displayPnLPercent !== 0 && ` (${displayPnLPercent >= 0 ? '+' : ''}${displayPnLPercent.toFixed(1)}%)`}
                 </span>
             </div>
+
+            {/* 赎回按钮 - 始终显示 */}
+            {canRedeem && (
+                <button
+                    onClick={(e) => onRedeem(position, e)}
+                    disabled={isRedeeming}
+                    style={{
+                        ...styles.redeemBtn,
+                        opacity: isRedeeming ? 0.6 : 1,
+                    }}
+                >
+                    {isRedeeming ? '赎回中...' : '💰 赎回'}
+                </button>
+            )}
         </div>
     );
 };
@@ -438,6 +645,29 @@ const styles = {
         cursor: 'pointer',
         fontSize: '13px',
         color: '#666'
+    },
+    redeemBtn: {
+        width: '100%',
+        marginTop: '10px',
+        padding: '10px',
+        border: 'none',
+        borderRadius: '8px',
+        backgroundColor: '#4caf50',
+        color: '#fff',
+        cursor: 'pointer',
+        fontSize: '13px',
+        fontWeight: '600',
+        transition: 'all 0.2s'
+    },
+    resolvedBadge: {
+        marginTop: '8px',
+        padding: '4px 8px',
+        backgroundColor: '#e8f5e9',
+        color: '#2e7d32',
+        borderRadius: '4px',
+        fontSize: '11px',
+        fontWeight: '500',
+        textAlign: 'center'
     }
 };
 
